@@ -1,0 +1,75 @@
+import paho.mqtt.client as mqtt
+import pymysql.cursors
+import sys
+import json
+import time
+import calendar
+from calendar import timegm
+
+# User variable for Gateway ID
+myGatewayID = "AE:5F:3E:5F:BF:2B"
+
+#User variable for database name
+dbName = "Energy"
+
+# User variables for MQTT Broker connection
+mqttBroker = "10.0.0.88"
+mqttBrokerPort = 1883
+mqttUser = "Nitt_Powr2"
+mqttPassword = "****"
+
+# In VPK VM
+mysqlHost = "127.0.0.1"
+mysqlUser = "root"
+mysqlPassword = "password"
+
+# This callback function fires when the MQTT Broker conneciton is established.  At this point a connection to MySQL server will be attempted.
+def on_connect(client, userdata, flags, rc):
+    print("MQTT Client Connected")
+    client.subscribe("gateway/"+myGatewayID+"/sensor/#")
+    try:
+        db = pymysql.connect(host=mysqlHost, user=mysqlUser, password=mysqlPassword, db=dbName, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
+        db.close()
+        print("MySQL Client Connected")
+    except:
+        sys.exit("Connection to MySQL failed")
+
+#This is the function that updates the SENSOR table with the data from the log.
+def updateSensor(db, payload):
+    cursor = db.cursor()
+	#The next 2 lines of code do the (current timestamp -> epoch) conversion.
+	Time = time.strptime(payload['Time'], "%Y-%m-%dT%H:%M:%S.%fZ")
+	TotalStartTime = time.strptime(payload['ENERGY']['TotalStartTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+	epochTotalStartTime = timegm(TotalStartTime)
+	epochTime = timegm(Time)
+    insertRequest = "INSERT INTO SENSOR(Time, TotalStartTime, Total, Yesterday, Today, Period, Power, ApparentPower, ReactivePower, Factor, Voltage, Current) VALUES(%u,%u,%f,%f,%f,%f,%i,%f,%f,%f,%f,%f,%f)" % (epochTime, epochTotalStartTime, payload['ENERGY']['Total'], payload['ENERGY']['Yesterday'], payload['ENERGY']['Today'], payload['ENERGY']['Period'],payload['ENERGY']['Power'], payload['ENERGY']['ApparentPower'], payload['ENERGY']['ReactivePower'], payload['ENERGY']['Factor'], payload['ENERGY']['Voltage'], payload['ENERGY']['Current'])
+    cursor.execute(insertRequest)
+    db.commit()
+
+######
+######			I HAVE ONLY CHANGED THE ABOVE FUNCTION SO THAT IT UPDATES THE SENSOR TABLE. YOU GUYS JUST NEED TO WORK ON THE BELOW CODE.
+######		
+######
+
+# The callback for when a PUBLISH message is received from the MQTT Broker.
+def on_message(client, userdata, msg):
+    print("Transmission received")
+    payload = json.loads((msg.payload).decode("utf-8"))
+    if 'sensor_id' in payload and 'data' in payload:
+        if 'transmission_count' in payload['data'] and 'battery_level' in payload['data'] and 'type' in payload['data'] and 'node_id' in payload['data'] and 'rssi' in payload['data']:
+            db = pymysql.connect(host="localhost", user=mysqlUser, password=mysqlPassword, db=dbName,charset='utf8mb4',cursorclass=pymysql.cursors.DictCursor)
+            sensor_update(db,payload)
+            print('data logged')
+            db.close()
+
+# Connect the MQTT Client
+client = mqtt.Client()
+client.on_connect = on_connect
+client.on_message = on_message
+# client.username_pw_set(username=mqttUser, password=mqttPassword)
+try:
+    client.connect(mqttBroker, mqttBrokerPort, 60)
+except:
+    sys.exit("Connection to MQTT Broker failed")
+# Stay connected to the MQTT Broker indefinitely
+client.loop_forever()
