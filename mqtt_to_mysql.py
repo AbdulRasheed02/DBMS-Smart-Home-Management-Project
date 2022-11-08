@@ -5,6 +5,7 @@ import json
 import time
 import calendar
 from calendar import timegm
+import datetime
 
 # User variable for Gateway ID
 myGatewayID = "AE:5F:3E:5F:BF:2B"
@@ -77,19 +78,28 @@ def log_sensor_telemetry(db, payload):
     cursor.execute(insertRequest)
     db.commit()
 
+# Custom function to convert time in "dT:HH:MM:SS" format to totalSeconds
+
+
+def customTimeFormatToSeconds(time):
+    indexOfT = time.index('T')
+    day = int(time[:indexOfT])
+    hour = int(time[indexOfT+1:indexOfT+3])
+    minute = int(time[indexOfT+4:indexOfT+6])
+    second = int(time[indexOfT+7:])
+    timeinSeconds = int(datetime.timedelta(
+        days=day, hours=hour, minutes=minute, seconds=second).total_seconds())
+    return timeinSeconds
 
 # This is the function that updates the STATE table from the log.
+
+
 def log_state_telemetry(db, payload):
     cursor = db.cursor()
 
     time = payload['Time']
-    # uptime = payload['Uptime']
-    uptime = 0
+    uptime = customTimeFormatToSeconds(payload['Uptime'])
     uptimesec = payload['UptimeSec']
-
-    # uptime = time.strptime(payload['Uptime'], "T%H:%M:%S")
-    # epochuptime = timegm(uptime)
-
     heap = payload['Heap']
     sleepmode = '"' + payload['SleepMode'] + '"'
     sleep = payload['Sleep']
@@ -106,10 +116,7 @@ def log_state_telemetry(db, payload):
     rssi = payload['Wifi']['RSSI']
     signal = payload['Wifi']['Signal']
     linkcount = payload['Wifi']['LinkCount']
-    # downtime = payload['Wifi']['Downtime']
-    downtime = 0
-
-
+    downtime = customTimeFormatToSeconds(payload['Wifi']['Downtime'])
 
     insertRequest = "INSERT INTO STATE VALUES(%u,%u,%i,%i,%s,%i,%f,%i,%i,%i,%s,%i,%s,%s,%i,%s,%i,%i,%i,%u)" % (
         time, uptime, uptimesec, heap, sleepmode, sleep, loadavg, mqttcount, heapused, objects, power, ap, ssid, bssid, channel, mode, rssi, signal, linkcount, downtime)
