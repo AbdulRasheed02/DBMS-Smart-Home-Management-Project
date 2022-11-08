@@ -1,6 +1,6 @@
 import paho.mqtt.client as mqtt
 import pymysql.cursors
-import sys333
+import sys
 import json
 import time
 import calendar
@@ -31,7 +31,8 @@ def on_connect(client, userdata, flags, rc):
 
     # Subscribe to STATE also
 
-    client.subscribe("gateway/"+myGatewayID+"/Sensor/#")
+    # client.subscribe("gateway/"+myGatewayID+"/Sensor/#")
+    client.subscribe("tele/nitt_pow/SENSOR")
     try:
         db = pymysql.connect(host=mysqlHost, user=mysqlUser, password=mysqlPassword,
                              db=dbName, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
@@ -46,8 +47,10 @@ def on_connect(client, userdata, flags, rc):
 def log_sensor_telemetry(db, payload):
     cursor = db.cursor()
 
-    time = payload['Time']
-    totalStartTime = payload['ENERGY']['TotalStartTime']
+    logTime = payload['Time']
+    totalStartTime = time.strptime(payload['ENERGY']['TotalStartTime'], "%Y-%m-%dT%H:%M:%S")
+    epochTotalStartTime = timegm(totalStartTime)
+    
     total = payload['ENERGY']['Total']
     yesterday = payload['ENERGY']['Yesterday']
     today = payload['ENERGY']['Today']
@@ -59,40 +62,9 @@ def log_sensor_telemetry(db, payload):
     voltage = payload['ENERGY']['Voltage']
     current = payload['ENERGY']['Current']
 
-    insertRequest = "INSERT INTO SENSOR VALUES(%u,%u,%f,%f,%f,%f,%i,%f,%f,%f,%f,%f,%f)" % (
-        time, totalStartTime, total, yesterday, today, period, power, apparentPower, reactivePower, factor, voltage, current)
-    cursor.execute(insertRequest)
-    db.commit()
+    insertRequest = "INSERT INTO SENSOR(Time, TotalStartTime, Total, Yesterday, Today, Period, Power, ApparentPower, ReactivePower, Factor, Voltage, Current) VALUES(%u,%u,%f,%f,%f,%f,%i,%f,%f,%f,%f,%f)" % (
+        logTime, epochTotalStartTime, total, yesterday, today, period, power, apparentPower, reactivePower, factor, voltage, current)
 
-# This is the function that updates the STATE table from the log.
-
-
-def log_state_telemetry(db, payload):
-    cursor = db.cursor()
-
-    time = payload['Time']
-    uptime = payload['Uptime']
-    uptimesec = payload['Uptimesec']
-    heap = payload['Heap']
-    sleepmode = payload['SleepMode']
-    sleep = payload['Sleep']
-    loadavg = payload['LoadAvg']
-    mqqtcount = payload['MqqtCount']
-    heapused = payload['Berry']['HeapUsed']
-    objects = payload['Berry']['Objects']
-    power = payload['POWER']
-    ap = payload['Wifi']['AP']
-    ssid = payload['Wifi']['SSId']
-    bssid = payload['Wifi']['BSSId']
-    channel = payload['Wifi']['Channel']
-    mode = payload['Wifi']['Mode']
-    rssi = payload['Wifi']['RSSi']
-    signal = payload['Wifi']['Signal']
-    linkcount = payload['Wifi']['LinkCount']
-    downtime = payload['Wifi']['Downtime']
-
-    insertRequest = "INSERT INTO STATE VALUES(%u,%u,%i,%i,%s,%i,%f,%i,%i,%i,%s,%i,%s,%s,%i,%s,%i,%i,%i,%u)" % (
-        time, uptime, uptimesec, heap, sleepmode, sleep, loadavg, mqttcount, heapused, objects, power, ap, ssid, bssid, channel, mode, rssi, signal, linkcount, downtime)
     cursor.execute(insertRequest)
     db.commit()
 
@@ -109,17 +81,23 @@ def on_message(client, userdata, msg):
             db = pymysql.connect(host=mysqlHost, user=mysqlUser, password=mysqlPassword,
                                  db=dbName, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
 
+            # Use this function for device id table
+            # sensor_update(db,payload)
+
             # Function for telemetry table
             log_sensor_telemetry(db, payload)
-            print("SENSOR data logged")
+            print('SENSOR data logged')
             db.close()
 
     # For STATE subscription
     if 'Time' in payload and 'Uptime' in payload and 'UptimeSec' in payload and 'Heap' in payload and 'SleepMode' in payload and 'Sleep' in payload and 'LoadAvg' in payload and 'MqttCount' in payload and 'Berry' in payload and 'POWER' in payload and 'Wifi' in payload:
         if 'HeapUsed' in payload['Berry'] and 'Objects' in payload['Berry'] and 'AP' in payload['Wifi'] and 'SSId' in payload['Wifi'] and 'BSSId' in payload['Wifi'] and 'Channel' in payload['Wifi'] and 'Mode' in payload['Wifi'] and 'RSSI' in payload['Wifi'] and 'Signal' in payload['Wifi'] and 'LinkCount' in payload['Wifi'] and 'Downtime' in payload['Wifi']:
 
+            # Use this function for device id table
+            # sensor_update(db,payload)
+
             # Function for telemetry table
-            log_telemetry(db, payload)
+            log_sensor_telemetry(db, payload)
             print('SENSOR data logged')
             db.close()
 
@@ -135,6 +113,3 @@ except:
     sys.exit("Connection to MQTT Broker failed")
 # Stay connected to the MQTT Broker indefinitely
 client.loop_forever()
-
-
-   
