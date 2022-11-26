@@ -1,4 +1,8 @@
+create table METER_ID(
+meter_id int not null);
+
 create table SENSOR(
+meter_id int references METER_ID(meter_id),
 Time int(11) unsigned,
 TotalStartTime int(11) unsigned,
 Total float,
@@ -14,6 +18,7 @@ Current float
 );
 
 create table STATE(
+meter_id int references METER_ID(meter_id),
 Time int(11) unsigned,
 Uptime int(11) unsigned,
 Uptimesec int,

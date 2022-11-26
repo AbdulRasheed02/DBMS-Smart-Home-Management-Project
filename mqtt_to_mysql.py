@@ -11,12 +11,12 @@ import datetime
 myGatewayID = "AE:5F:3E:5F:BF:2B"
 
 # User variable for database name
-dbName = "Energy"
+dbName = "SHM"
 
 # User variables for MQTT Broker connection
 
 # mqttBroker in CSE Lab Server (Local Host)
-mqttBroker = "127.0.0.1"
+mqttBroker = "10.0.0.88"
 mqttBrokerPort = 1883
 mqttUser = "Nitt_Powr2"
 mqttPassword = "****"
