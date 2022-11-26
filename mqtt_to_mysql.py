@@ -14,9 +14,8 @@ myGatewayID = "AE:5F:3E:5F:BF:2B"
 dbName = "SHM"
 
 # User variables for MQTT Broker connection
-
 # mqttBroker in CSE Lab Server (Local Host)
-mqttBroker = "10.0.0.88"
+mqttBroker = "127.0.0.1"
 mqttBrokerPort = 1883
 mqttUser = "Nitt_Powr2"
 mqttPassword = "****"
@@ -28,13 +27,17 @@ mysqlPassword = "password"
 
 # unique identifier for meter (Change the topic of meter from nitt_pow to 1 when reflashing)
 meterTopic = 1
+# mySQL table names being used
+metersTable= "METER_ID"
+sensorTable = "SENSOR"
+stateTable= "STATE"
 
 # This callback function fires when the MQTT Broker conneciton is established.  At this point a connection to MySQL server will be attempted.
 def on_connect(client, userdata, flags, rc):
     print("MQTT Client Connected")
 
     # Subscription to SENSOR
-    #client.subscribe("tele/"+meterTopic+"/SENSOR")
+    #client.subscribe("tele/"+str(meterTopic)+"/SENSOR")
     client.subscribe("tele/nitt_pow/SENSOR")
     try:
         db = pymysql.connect(host=mysqlHost, user=mysqlUser, password=mysqlPassword,
@@ -45,7 +48,7 @@ def on_connect(client, userdata, flags, rc):
         sys.exit("Connection to MySQL failed")
 
     # Subscription to STATE
-    #client.subscribe("tele/"+meterTopic+"/STATE")
+    #client.subscribe("tele/"+str(meterTopic)+"/STATE")
     client.subscribe("tele/nitt_pow/STATE")
     try:
         db = pymysql.connect(host=mysqlHost, user=mysqlUser, password=mysqlPassword,
@@ -56,7 +59,7 @@ def on_connect(client, userdata, flags, rc):
         sys.exit("Connection to MySQL failed")
 
 
-# This is the function that updates the SENSOR table with the data from the log.
+# This is the function that inserts into the sensorTable with the data from the log.
 def log_sensor_telemetry(db, payload):
     cursor = db.cursor()
 
@@ -77,8 +80,8 @@ def log_sensor_telemetry(db, payload):
     voltage = payload['ENERGY']['Voltage']
     current = payload['ENERGY']['Current']
 
-    insertRequest = "INSERT INTO SENSOR(meter_id,Time, TotalStartTime, Total, Yesterday, Today, Period, Power, ApparentPower, ReactivePower, Factor, Voltage, Current) VALUES(%i,%u,%u,%f,%f,%f,%f,%i,%f,%f,%f,%f,%f)" % (
-        meterID,logTime, epochTotalStartTime, total, yesterday, today, period, power, apparentPower, reactivePower, factor, voltage, current)
+    insertRequest = "INSERT INTO %s(meter_id,Time, TotalStartTime, Total, Yesterday, Today, Period, Power, ApparentPower, ReactivePower, Factor, Voltage, Current) VALUES(%i,%u,%u,%f,%f,%f,%f,%i,%f,%f,%f,%f,%f)" % (
+        sensorTable,meterID,logTime, epochTotalStartTime, total, yesterday, today, period, power, apparentPower, reactivePower, factor, voltage, current)
 
     cursor.execute(insertRequest)
     db.commit()
@@ -94,7 +97,7 @@ def customTimeFormatToSeconds(time):
         days=day, hours=hour, minutes=minute, seconds=second).total_seconds())
     return timeinSeconds
 
-# This is the function that updates the STATE table from the log.
+# This is the function that inserts into the stateTable with the data from the log.
 def log_state_telemetry(db, payload):
     cursor = db.cursor()
 
@@ -120,20 +123,20 @@ def log_state_telemetry(db, payload):
     linkcount = payload['Wifi']['LinkCount']
     downtime = customTimeFormatToSeconds(payload['Wifi']['Downtime'])
 
-    insertRequest = "INSERT INTO STATE VALUES(%i,%u,%u,%i,%i,%s,%i,%f,%i,%i,%i,%s,%i,%s,%s,%i,%s,%i,%i,%i,%u)" % (
-        meterID,time, uptime, uptimesec, heap, sleepmode, sleep, loadavg, mqttcount, heapused, objects, power, ap, ssid, bssid, channel, mode, rssi, signal, linkcount, downtime)
+    insertRequest = "INSERT INTO %s VALUES(%i,%u,%u,%i,%i,%s,%i,%f,%i,%i,%i,%s,%i,%s,%s,%i,%s,%i,%i,%i,%u)" % (
+        stateTable,meterID,time, uptime, uptimesec, heap, sleepmode, sleep, loadavg, mqttcount, heapused, objects, power, ap, ssid, bssid, channel, mode, rssi, signal, linkcount, downtime)
 
     cursor.execute(insertRequest)
     db.commit()
 
-#Function to add new energy meters into the METER_ID table
-def update_devices(db):
+#Function to add new energy meters into the metersTable
+def update_meters(db):
     cursor = db.cursor()
 
     meterID=meterTopic
 
-    # See if meter already exists in METER_ID table, if not insert it.
-    deviceQuery = "EXISTS(SELECT * FROM METER_ID WHERE meter_id = %i)"%(meterID)
+    # See if meter already exists in metersTable, if not insert it.
+    deviceQuery = "EXISTS(SELECT * FROM %s WHERE meter_id = %i)"%(metersTable,meterID)
     cursor.execute("SELECT "+deviceQuery)
     data = cursor.fetchone()
 
@@ -143,8 +146,8 @@ def update_devices(db):
         #cursor.execute(updateRequest)
         db.commit() 
     else:
-        #Device does not exist. Insert into METER_ID table
-        insertRequest = "INSERT INTO METER_ID(meter_id) VALUES(%i)" % (meterID)
+        #Device does not exist. Insert into metersTable
+        insertRequest = "INSERT INTO %s(meter_id) VALUES(%i)" % (metersTable,meterID)
         cursor.execute(insertRequest)
         db.commit()
 
@@ -157,8 +160,8 @@ def on_message(client, userdata, msg):
     db = pymysql.connect(host=mysqlHost, user=mysqlUser, password=mysqlPassword,
                                  db=dbName, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
 
-    #Update METER_ID table 
-    update_devices(db)
+    #Update metersTable 
+    update_meters(db)
 
     # For SENSOR data
     if 'Time' in payload and 'ENERGY' in payload:
